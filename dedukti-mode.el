@@ -21,9 +21,9 @@
 
 ; An identifier is composed of alphanumerical symbols and underscores
 ; but cannot start with a digit
-(setq dedukti-id "[_a-zA-Z][_a-zA-Z0-9]*")
+(defvar dedukti-id "[_a-zA-Z][_a-zA-Z0-9]*")
 
-(setq dedukti-symbolic-keywords
+(defvar dedukti-symbolic-keywords
       '(":="        ; Definition
         ":"         ; Declaration, annotated lambdas and pis
         "-->"       ; Rewrite-rule
