@@ -114,6 +114,11 @@ If no file is given, compile the file associated with the current buffer."
               ,@dedukti-compile-options
               ,file)))))
 
+(add-hook 'dedukti-mode-hook
+          (lambda () (local-set-key (kbd "C-c c") 'dedukti-compile-file)))
+(add-hook 'dedukti-mode-hook
+          (lambda () (local-set-key (kbd "C-c C-c") 'compile)))
+
 ;; Optional: flycheck integration
 
 (when (require 'flycheck nil t)
