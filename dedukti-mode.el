@@ -17,6 +17,27 @@
 
 ;;; Code:
 
+;; Customization
+
+(defgroup dedukti nil
+  "Major mode for Dedukti files."
+  :group 'languages)
+
+(defcustom dedukti-command "/usr/bin/dkcheck"
+  "Path to the Dedukti type-checker."
+  :group 'dedukti
+  :type '(file :must-match t))
+
+(defcustom dedukti-compile-options '("-nc" "-e")
+  "Options to pass to `dedukti-command' to compile files."
+  :group 'dedukti
+  :type '(list string))
+
+(defcustom dedukti-check-options '("-nc")
+  "Options to pass to `dedukti-command' to typecheck files."
+  :group 'dedukti
+  :type '(list string))
+
 ;; Generic major mode
 
 (require 'generic-x)
@@ -83,17 +104,47 @@ in the same order."
     (list (match-string 0))))
 
 (require 'compile)
-(add-to-list 'compilation-error-regexp-alist
-    '("^File \\(.+\\), line \\([0-9]+\\), characters \\([0-9]+\\)-\\([0-9]+\\):"
-      1 2 (3 . 4)))
 
 (add-to-list 'compilation-error-regexp-alist
-    '("^\\[l:\\([0-9]+\\);c:\\([0-9]+\\)\\].*\\[KO\\]"
-      nil 1 2))
+    '("^ERROR line:\\([0-9]+\\) column:\\([0-9]+\\)"
+      nil 2 3 2))
 
 (add-to-list 'compilation-error-regexp-alist
-    '("^\\(WARNING|ERROR\\) line:\\([0-9]+\\) column:\\([0-9]+\\)"
-      nil 2 3))
+    '("^WARNING line:\\([0-9]+\\) column:\\([0-9]+\\)"
+      nil 2 3 1))
+
+;; Calling Dedukti
+
+(defun dedukti-compile-file (&optional file)
+  "Compile file FILE with Dedukti.
+If no file is given, compile the file associated with the current buffer."
+  (interactive)
+  (let ((file (or file (buffer-file-name))))
+    (when file
+      (eval `(start-process
+              "Dedukti compiler"
+              ,(get-buffer-create "*Dedukti Compiler*")
+              ,dedukti-command
+              ,@dedukti-compile-options
+              ,file)))))
+
+;; Optional: flycheck integration
+
+(when (require 'flycheck nil t)
+
+  (flycheck-define-checker dedukti
+    "Dedukti type checker."
+    :command ((eval dedukti-command) (eval dedukti-check-options) source-inplace)
+    :error-patterns
+    ((warning line-start "WARNING line:" line " column:" column (message) line-end)
+     (error   line-start "ERROR line:"   line " column:" column (message) line-end))
+    :modes dedukti-mode)
+
+  (add-to-list 'flycheck-checkers 'dedukti)
+
+  (add-hook 'dedukti-mode-hook 'flycheck-mode)
+
+  )
 
 (provide 'dedukti-mode)
 
