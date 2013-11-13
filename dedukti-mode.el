@@ -65,22 +65,23 @@ but cannot start with a digit.")
 ;;;###autoload
 (define-generic-mode
   dedukti-mode
-  '(("(;".";)"))                                              ;; comments
-  '("Type")                                                   ;; keywords
+  '(("(;".";)"))                             ;; comments
+  '("Type")                                  ;; keywords
   `(
     (,(format "^ *#\\(IMPORT\\|NAME\\) %s" dedukti-id) .
-     'font-lock-preprocessor-face)                            ;; pragmas
+     'font-lock-preprocessor-face)           ;; pragmas
     (,(format "^ *%s *:=?" dedukti-id) .
-     'font-lock-function-name-face)                           ;; declarations and definitions
+     'font-lock-function-name-face)          ;; declarations and definitions
     (,(format "%s *:[^=]" dedukti-id) .
-     'font-lock-function-name-face)                           ;; variable name in lambdas and pis
+     'font-lock-function-name-face)          ;; variable name in lambdas and pis
     (,(format "%s\\.%s" dedukti-id dedukti-id) .
-     'font-lock-constant-face)                                ;; qualified identifiers
+     'font-lock-constant-face)               ;; qualified identifiers
     (,dedukti-id .
-                 'font-lock-variable-name-face)               ;; identifiers
-    (,(regexp-opt dedukti-symbolic-keywords) . 'font-lock-keyword-face)
+     'font-lock-variable-name-face)          ;; identifiers
+    (,(regexp-opt dedukti-symbolic-keywords)
+     . 'font-lock-keyword-face)
     ) 
-  '(".dk\\'")                                              ;; use this mode for .dk files
+  '(".dk\\'")                                    ;; use this mode for .dk files
   nil
   "Major mode for editing Dedukti source code files.")
 
@@ -119,10 +120,14 @@ If no file is given, compile the file associated with the current buffer."
 
   (flycheck-define-checker dedukti
     "Dedukti type checker."
-    :command ((eval dedukti-command) (eval dedukti-check-options) source-inplace)
+    :command ((eval dedukti-command)
+              (eval dedukti-check-options)
+              source-inplace)
     :error-patterns
-    ((warning line-start "WARNING line:" line " column:" column (message) line-end)
-     (error   line-start "ERROR line:"   line " column:" column (message) line-end))
+    ((warning
+        line-start "WARNING line:" line " column:" column (message) line-end)
+     (error
+        line-start "ERROR line:"   line " column:" column (message) line-end))
     :modes dedukti-mode)
 
   (add-to-list 'flycheck-checkers 'dedukti)
