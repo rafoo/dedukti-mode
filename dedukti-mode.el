@@ -92,12 +92,16 @@ but cannot start with a digit.")
 (require 'compile)
 
 (add-to-list 'compilation-error-regexp-alist
-    '("^ERROR line:\\([0-9]+\\) column:\\([0-9]+\\)"
-      nil 2 3 2))
+    `(,(format
+        "^ERROR file:\\(%s.dk\\) line:\\([0-9]+\\) column:\\([0-9]+\\)"
+        dedukti-id)
+      1 2 3 2))
 
 (add-to-list 'compilation-error-regexp-alist
-    '("^WARNING line:\\([0-9]+\\) column:\\([0-9]+\\)"
-      nil 2 3 1))
+    `(,(format
+        "^WARNING file:\\(%s.dk\\) line:\\([0-9]+\\) column:\\([0-9]+\\)"
+        dedukti-id)
+      1 2 3 1))
 
 ;; Calling Dedukti
 
@@ -130,9 +134,9 @@ If no file is given, compile the file associated with the current buffer."
               source-inplace)
     :error-patterns
     ((warning
-        line-start "WARNING line:" line " column:" column (message) line-end)
+        line-start "WARNING file:" (file-name) " line:" line " column:" column (message) line-end)
      (error
-        line-start "ERROR line:"   line " column:" column (message) line-end))
+        line-start "ERROR file:"   (file-name) " line:" line " column:" column (message) line-end))
     :modes dedukti-mode)
 
   (add-to-list 'flycheck-checkers 'dedukti)
