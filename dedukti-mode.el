@@ -1,4 +1,4 @@
-;;; dedukti-mode.el --- Basics syntax highlighting for Dedukti files in GNU Emacs
+;;; dedukti-mode.el --- Major mode for Dedukti files
 
 ;; Copyright 2013 Raphaël Cauderlier
 
@@ -50,6 +50,7 @@ in the same order."
         (car l))
     nil))
 
+;;;###autoload
 (define-generic-mode
   dedukti-mode
   '(("(;".";)"))                                              ;; comments
