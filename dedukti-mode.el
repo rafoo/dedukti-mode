@@ -62,15 +62,6 @@ but cannot start with a digit.")
     )
   "List of non-alphabetical Dedukti keywords.")
 
-(defun dedukti-regexp-dijunct (l)
-  "Return a regexp representing the disjunction of the elements of l
-in the same order."
-  (if l
-      (if (cdr l)
-          (concat (car l) "\\|" (dedukti-regexp-dijunct (cdr l)))
-        (car l))
-    nil))
-
 ;;;###autoload
 (define-generic-mode
   dedukti-mode
@@ -87,7 +78,7 @@ in the same order."
      'font-lock-constant-face)                                ;; qualified identifiers
     (,dedukti-id .
                  'font-lock-variable-name-face)               ;; identifiers
-    (,(dedukti-regexp-dijunct dedukti-symbolic-keywords) . 'font-lock-keyword-face)
+    (,(regexp-opt dedukti-symbolic-keywords) . 'font-lock-keyword-face)
     ) 
   '(".dk\\'")                                              ;; use this mode for .dk files
   nil
