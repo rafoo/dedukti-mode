@@ -88,12 +88,6 @@ but cannot start with a digit.")
 
 ;; Errors from the compilation buffer
 
-(defun dedukti-compilation-error-find-file ()
-  "Look backward in the compilation buffer looking for the last Dedukti file."
-  (save-excursion
-    (re-search-backward "[a-zA-Z_/]+.dk")
-    (list (match-string 0))))
-
 (require 'compile)
 
 (add-to-list 'compilation-error-regexp-alist
