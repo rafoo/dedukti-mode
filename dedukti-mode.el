@@ -17,24 +17,29 @@
 
 ;;; Code:
 
+;; Generic major mode
+
 (require 'generic-x)
 
-; An identifier is composed of alphanumerical symbols and underscores
-; but cannot start with a digit
-(defvar dedukti-id "[_a-zA-Z][_a-zA-Z0-9]*")
+(defvar dedukti-id
+  "[_a-zA-Z][_a-zA-Z0-9]*"
+  "Regexp matching Dedukti identifiers.
+An identifier is composed of alphanumerical symbols and underscores
+but cannot start with a digit.")
 
 (defvar dedukti-symbolic-keywords
-      '(":="        ; Definition
-        ":"         ; Declaration, annotated lambdas and pis
-        "-->"       ; Rewrite-rule
-        "->"        ; Pi (dependant type constructor)
-        "=>"        ; Lambda (function constructor)
-        "\\[" "\\]" ; Rewrite-rule environment
-        "(" ")"     ; Expression grouping
-        "{" "}"     ; Dot patterns
-        ","         ; Environment separator
-        "."         ; Global context separator
-        ))
+  '(":="        ; Definition
+    ":"         ; Declaration, annotated lambdas and pis
+    "-->"       ; Rewrite-rule
+    "->"        ; Pi (dependant type constructor)
+    "=>"        ; Lambda (function constructor)
+    "\\[" "\\]" ; Rewrite-rule environment
+    "(" ")"     ; Expression grouping
+    "{" "}"     ; Dot patterns
+    ","         ; Environment separator
+    "."         ; Global context separator
+    )
+  "List of non-alphabetical Dedukti keywords.")
 
 (defun dedukti-regexp-dijunct (l)
   "Return a regexp representing the disjunction of the elements of l
@@ -65,6 +70,10 @@ in the same order."
   '(".dk\\'")                                              ;; use this mode for .dk files
   nil
   "Major mode for editing Dedukti source code files.")
+
+;; Error handling
+
+;; Errors from the compilation buffer
 
 (defun dedukti-compilation-error-find-file ()
   "Look backward in the compilation buffer looking for the last Dedukti file."
