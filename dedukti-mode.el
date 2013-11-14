@@ -43,10 +43,12 @@
 (require 'generic-x)
 
 (defvar dedukti-id
-  "[_a-zA-Z][_a-zA-Z0-9]*"
-  "Regexp matching Dedukti identifiers.
-An identifier is composed of alphanumerical symbols and underscores
-but cannot start with a digit.")
+  "[_a-zA-Z0-9][_a-zA-Z0-9!?']*"
+  "Regexp matching Dedukti identifiers.")
+
+(defvar dedukti-qualifier
+  "[_a-zA-Z0-9]+"
+  "Regexp matching Dedukti qualifiers.")
 
 (defvar dedukti-symbolic-keywords
   '(":="        ; Definition
@@ -68,13 +70,13 @@ but cannot start with a digit.")
   '(("(;".";)"))                             ;; comments
   '("Type")                                  ;; keywords
   `(
-    (,(format "^ *#\\(IMPORT\\|NAME\\) %s" dedukti-id) .
+    (,(format "^ *#\\(IMPORT\\|NAME\\)[ \t]+%s" dedukti-qualifier) .
      'font-lock-preprocessor-face)           ;; pragmas
     (,(format "^ *%s *:=?" dedukti-id) .
      'font-lock-function-name-face)          ;; declarations and definitions
     (,(format "%s *:[^=]" dedukti-id) .
      'font-lock-function-name-face)          ;; variable name in lambdas and pis
-    (,(format "%s\\.%s" dedukti-id dedukti-id) .
+    (,(format "%s\\.%s" dedukti-qualifier dedukti-id) .
      'font-lock-constant-face)               ;; qualified identifiers
     (,dedukti-id .
      'font-lock-variable-name-face)          ;; identifiers
@@ -94,13 +96,13 @@ but cannot start with a digit.")
 (add-to-list 'compilation-error-regexp-alist
     `(,(format
         "^ERROR file:\\(%s.dk\\) line:\\([0-9]+\\) column:\\([0-9]+\\)"
-        dedukti-id)
+        dedukti-qualifier)
       1 2 3 2))
 
 (add-to-list 'compilation-error-regexp-alist
     `(,(format
         "^WARNING file:\\(%s.dk\\) line:\\([0-9]+\\) column:\\([0-9]+\\)"
-        dedukti-id)
+        dedukti-qualifier)
       1 2 3 1))
 
 ;; Calling Dedukti
