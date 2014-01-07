@@ -131,7 +131,7 @@ If no file is given, compile the file associated with the current buffer."
 
   (flycheck-define-checker dedukti
     "Dedukti type checker."
-    :command ((eval dedukti-command)
+    :command ("dkcheck"
               (eval dedukti-check-options)
               source-inplace)
     :error-patterns
