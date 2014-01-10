@@ -147,6 +147,39 @@ If no file is given, compile the file associated with the current buffer."
 
   )
 
+;; Indentation
+
+;; (require 'smie)
+;; (defvar dedukti-smie-grammar
+;;   (smie-prec2->grammar
+;;    (smie-bnf->prec2
+;;     '((id)
+;;       (prelude ("#NAME" id))
+;;       (line ("#IMPORT" id)
+;;             (term ".")
+;;             (term ":=" term ".")
+;;             (rule)
+;;             (rule ".")
+;;             ("#ASSERT" term "=~" term "."))
+;;       (rule ("[" context "]" term "-->" term))
+;;       (decl (id ":" term))
+;;       (context (decl "," context)
+;;                (decl))
+;;       (term (id)
+;;             ("{" id "}")
+;;             (decl)
+;;             ("_")
+;;             (term "->" term)
+;;             (decl "=>" term)))
+;;     '((assoc ":")
+;;       (assoc "->" "=>")))))
+;;;; Raise an cl-assertion, TODO report bug 
+
+;; (defun dedukti-smie-setup ()
+;;   (smie-setup dedukti-smie-grammar rules-fun))
+
+;; (add-hook 'dedukti-mode-hook 'dedukti-smie-setup)
+
 (provide 'dedukti-mode)
 
 ;;; dedukti-mode.el ends here
