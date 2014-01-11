@@ -23,18 +23,18 @@
   "Major mode for Dedukti files."
   :group 'languages)
 
-(defcustom dedukti-command "/usr/bin/dkcheck"
+(defcustom dedukti-path "/usr/bin/dkcheck"
   "Path to the Dedukti type-checker."
   :group 'dedukti
   :type '(file :must-match t))
 
 (defcustom dedukti-compile-options '("-nc" "-e")
-  "Options to pass to `dedukti-command' to compile files."
+  "Options to pass to dedukti to compile files."
   :group 'dedukti
   :type '(list string))
 
 (defcustom dedukti-check-options '("-nc")
-  "Options to pass to `dedukti-command' to typecheck files."
+  "Options to pass to dedukti to typecheck files."
   :group 'dedukti
   :type '(list string))
 
@@ -116,7 +116,7 @@ If no file is given, compile the file associated with the current buffer."
       (eval `(start-process
               "Dedukti compiler"
               ,(get-buffer-create "*Dedukti Compiler*")
-              ,dedukti-command
+              ,dedukti-path
               ,@dedukti-compile-options
               ,file)))))
 
