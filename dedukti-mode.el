@@ -333,7 +333,7 @@ Return one of:
   (or (dedukti-smie-backward-token) (backward-sexp)))
 
 (add-hook 'dedukti-mode-hook
-          (lambda () (local-set-key (kbd "<C-right>")
+          (lambda () (local-set-key (kbd "<C-left>")
                                     'dedukti-backward)))
 
 (defcustom dedukti-indent-basic 2 "Basic indentation for dedukti-mode.")
