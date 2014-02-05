@@ -265,16 +265,21 @@ Return one of:
        (progn (skip-syntax-forward "w_")
               (point))))))
 
-(defun dedukti-smie-forward-debug ()
-  "Print the current value of `dedukti-smie-forward-token'."
-  (interactive)
-  (let ((v (dedukti-smie-forward-token)))
-    (if v (princ v) (forward-sexp))))
-
 (defun dedukti-forward ()
   "Move forward by one token or by a sexp."
   (interactive)
-  (or (dedukti-smie-forward-token) (forward-sexp)))
+  (let ((beg (point)))
+    (prog1
+        (or (dedukti-smie-forward-token)
+            (forward-sexp))
+      (when (eq beg (point))
+        (forward-char)))))
+
+(defun dedukti-smie-forward-debug ()
+  "Print the current value of `dedukti-smie-forward-token'."
+  (interactive)
+  (let ((v (dedukti-forward)))
+    (when v (princ v))))
 
 (add-hook 'dedukti-mode-hook
           (lambda () (local-set-key (kbd "<C-right>")
@@ -321,16 +326,21 @@ Return one of:
        (progn (skip-syntax-backward "w_")
               (point))))))
 
-(defun dedukti-smie-backward-debug ()
-  "Print the current value of `dedukti-smie-backward-token'."
-  (interactive)
-  (let ((v (dedukti-smie-backward-token)))
-    (if v (princ v) (backward-sexp))))
-
 (defun dedukti-backward ()
   "Move backward by one token or by a sexp."
   (interactive)
-  (or (dedukti-smie-backward-token) (backward-sexp)))
+  (let ((beg (point)))
+    (prog1
+        (or (dedukti-smie-backward-token)
+            (backward-sexp))
+      (when (eq beg (point))
+        (backward-char)))))
+
+(defun dedukti-smie-backward-debug ()
+  "Print the current value of `dedukti-smie-backward-token'."
+  (interactive)
+  (let ((v (dedukti-backward)))
+    (when v (princ v))))
 
 (add-hook 'dedukti-mode-hook
           (lambda () (local-set-key (kbd "<C-left>")
