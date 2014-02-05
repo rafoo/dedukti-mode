@@ -387,6 +387,166 @@ For the format of KIND and TOKEN, see `smie-rules-function'."
 
 (add-hook 'dedukti-mode-hook 'dedukti-smie-setup)
 
+(defun dedukti-phrase-type ()
+  "Return the kind of phrase point is in.
+A list starting by one of the symbols `comment', `pragma', `rule', `decl',
+or `def' followed by two buffer positions for beginning and end of phrase."
+  (let ((start (point)) beg end)
+    (or
+     (save-excursion
+       (forward-char 2)
+       (when (re-search-backward "(;" nil t)
+         (setq beg (point))
+         (forward-char 2)
+         (re-search-forward ";)")
+         (setq end (point))
+         (when (>= end start)
+           `(comment ,beg ,end))))
+     (save-excursion
+       (back-to-indentation)
+       (when (looking-at "#")
+         (setq beg (point))
+         (end-of-line)
+         `(pragma ,beg ,(point))))
+     (save-excursion
+       (when (re-search-backward "\\[" nil t)
+         (setq beg (point))
+         (re-search-forward "-->")
+         (forward-sexp)
+         (re-search-forward "\\." nil t)
+         (setq end (point))
+         (when (> end start)
+           `(rule ,beg ,end))))
+     (save-excursion
+       (backward-char)
+       (when (re-search-forward "\\.[^a-zA-Z0-9_]" nil t)
+         (backward-char)
+         (setq end (point))
+         (backward-sexp)
+         (setq beg (point))
+         (if (re-search-forward ":=" end t)
+             `(def ,beg ,end)
+           `(decl ,beg ,end))))
+     )))
+
+(defun dedukti-phrase-type-debug ()
+  "Print the current value of `dedukti-phrase-type'."
+  (interactive)
+  (let* ((type (dedukti-phrase-type))
+         (ty (car type))
+         (beg (cadr type))
+         (end (caddr type)))
+    (prin1 ty)
+    (setq mark-active t)
+    (set-mark beg)
+    (goto-char end)))
+
+;; (add-hook 'dedukti-mode-hook
+;;           (lambda () (local-set-key (kbd "<f9>") 'dedukti-phrase-type-debug)))
+
+
+
+(defun dedukti-beginning-of-phrase ()
+  "Go to the beggining of the current phrase."
+  (interactive)
+  (goto-char (cadr (dedukti-phrase-type))))
+
+
+(defun dedukti-end-of-phrase ()
+  "Go to the end of the current phrase."
+  (interactive)
+  (goto-char (caddr (dedukti-phrase-type))))
+
+(add-hook 'dedukti-mode-hook
+          (lambda () (local-set-key (kbd "C-a") 'dedukti-beginning-of-phrase)))
+
+(add-hook 'dedukti-mode-hook
+          (lambda () (local-set-key (kbd "C-e") 'dedukti-end-of-phrase)))
+
+
+
+(defun dedukti-rule-context-at-point ()
+  "Return the rewrite-rule context of the rule under point."
+  (let (var type context)
+    (save-excursion
+      (dedukti-beginning-of-phrase)
+      (re-search-forward "\\[")
+      (while (not (looking-back "\\]"))
+        (forward-comment (point-max))
+        (looking-at dedukti-id)
+        (setq var (match-string-no-properties 0))
+        (goto-char (match-end 0))
+        (forward-comment (point-max))
+        (re-search-forward ":")
+        (forward-comment (point-max))
+        (re-search-forward "\\([^],]*\\)[],]")
+        (setq type (match-string-no-properties 1))
+        (add-to-list 'context (cons var type) t)))
+    context))
+
+(defun dedukti-goto-last-LCOLON ()
+  "Go to the last local colon and return the position."
+  (while (not (equal (dedukti-backward) "LCOLON")))
+  (point))
+
+(defun dedukti-context-at-point ()
+  "Return the Dedukti context at point.
+This is a list of cons cells (id . type)."
+  (let ((start (point))
+        phrase-beg var type context mid)
+    (save-excursion
+      (dedukti-beginning-of-phrase)
+      (setq phrase-beg (point)))
+    (save-excursion
+      (while (> (setq start (dedukti-goto-last-LCOLON)) phrase-beg)
+        (forward-comment (- (point)))
+        (looking-back dedukti-id nil t)
+        (setq var (match-string-no-properties 0))
+        (goto-char (match-end 0))
+        (forward-comment (point-max))
+        (re-search-forward ":")
+        (forward-comment (point-max))
+        (setq mid (point))
+        (forward-sexp)
+        (setq type (buffer-substring-no-properties mid (point)))
+        (add-to-list 'context (cons var type))
+        (goto-char start)
+        ))
+    context))
+
+(defun dedukti-insert-context (context)
+  "Insert CONTEXT as dedukti declarations.
+CONTEXT is a list of cons cells of strings."
+  (dolist (cons context)
+    (insert (car cons) " : " (cdr cons) ".\n")))
+
+(defun dedukti-reduce (beg end)
+  "Call dedukti to reduce the selected term and replace it in place."
+  (interactive "r")
+  (let* ((phrase-type (dedukti-phrase-type))
+         (rulep (eq (car phrase-type) 'rule))
+         (phrase-beg (cadr phrase-type))
+         (buffer (current-buffer))
+         (rule-context (when rulep (dedukti-rule-context-at-point)))
+         (context (dedukti-context-at-point))
+         (term (buffer-substring-no-properties beg end)))
+    (with-temp-file "tmp.dk"
+      (erase-buffer)
+      (insert-buffer-substring buffer nil phrase-beg)
+      (insert "\n")
+      (dedukti-insert-context rule-context)
+      (dedukti-insert-context context)
+      (insert ":= " term "."))
+    (goto-char beg)
+    (delete-region beg end)
+    (setq term (replace-regexp-in-string
+                "\\[[0-9]+\\]"
+                ""
+                (shell-command-to-string "dkcheck -q -r -nc tmp.dk 2> /dev/null")
+                nil
+                t))
+    (insert "(" term ")")))
+
 (provide 'dedukti-mode)
 
 ;;; dedukti-mode.el ends here
