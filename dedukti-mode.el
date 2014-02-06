@@ -38,6 +38,11 @@
   :group 'dedukti
   :type '(list string))
 
+(defcustom dedukti-reduction-command ":= %s."
+  "Format of the dedukti command used for reduction.
+Typical values are \":= %s.\" for head normalisation and
+\"#SNF (%s).\" for strong normalisation.")
+
 ;; Generic major mode
 
 (require 'generic-x)
@@ -536,7 +541,7 @@ CONTEXT is a list of cons cells of strings."
       (insert "\n")
       (dedukti-insert-context rule-context)
       (dedukti-insert-context context)
-      (insert ":= " term "."))
+      (insert (format dedukti-reduction-command term)))
     (goto-char beg)
     (delete-region beg end)
     (setq term (replace-regexp-in-string
