@@ -50,6 +50,20 @@
   "[_a-zA-Z0-9]+"
   "Regexp matching Dedukti qualifiers.")
 
+(defvar dedukti-qid
+  (format "\\(\\<%s\\>\\.\\)?\\<%s\\>"
+          dedukti-qualifier
+          dedukti-id)
+  "Regexp matching Dedukti qualified identifiers.")
+
+(defvar dedukti-qid-back
+  (format "\\(\\(%s\\)?\\.\\)?%s"
+          dedukti-qualifier
+          dedukti-id)
+  "Regexp matching Dedukti qualified identifiers backward.
+Since characters are added one by one,
+expressions of the form `.id' are allowed.")
+
 (defvar dedukti-symbolic-keywords
   '(":="        ; Definition
     ":"         ; Declaration, annotated lambdas and pis
@@ -58,9 +72,10 @@
     "=>"        ; Lambda (function constructor)
     "\\[" "\\]" ; Rewrite-rule environment
     "(" ")"     ; Expression grouping
-    "{" "}"     ; Dot patterns
+    "{" "}"     ; Dot patterns and opaque definitions
     ","         ; Environment separator
     "."         ; Global context separator
+    "~="        ; Converstion test
     )
   "List of non-alphabetical Dedukti keywords.")
 
@@ -70,7 +85,7 @@
   '(("(;".";)"))                             ;; comments
   '("Type")                                  ;; keywords
   `(
-    (,(format "^ *#\\(IMPORT\\|NAME\\)[ \t]+%s" dedukti-qualifier) .
+    (,(format "^ *#\\(IMPORT\\|NAME\\|ASSERT\\)[ \t]+%s" dedukti-qualifier) .
      'font-lock-preprocessor-face)           ;; pragmas
     (,(format "^ *%s *:=?" dedukti-id) .
      'font-lock-function-name-face)          ;; declarations and definitions
@@ -82,7 +97,7 @@
      'font-lock-variable-name-face)          ;; identifiers
     (,(regexp-opt dedukti-symbolic-keywords)
      . 'font-lock-keyword-face)
-    ) 
+    )
   '(".dk\\'")                                    ;; use this mode for .dk files
   nil
   "Major mode for editing Dedukti source code files.")
@@ -149,36 +164,388 @@ If no file is given, compile the file associated with the current buffer."
 
 ;; Indentation
 
-;; (require 'smie)
-;; (defvar dedukti-smie-grammar
-;;   (smie-prec2->grammar
-;;    (smie-bnf->prec2
-;;     '((id)
-;;       (prelude ("#NAME" id))
-;;       (line ("#IMPORT" id)
-;;             (term ".")
-;;             (term ":=" term ".")
-;;             (rule)
-;;             (rule ".")
-;;             ("#ASSERT" term "=~" term "."))
-;;       (rule ("[" context "]" term "-->" term))
-;;       (decl (id ":" term))
-;;       (context (decl "," context)
-;;                (decl))
-;;       (term (id)
-;;             ("{" id "}")
-;;             (decl)
-;;             ("_")
-;;             (term "->" term)
-;;             (decl "=>" term)))
-;;     '((assoc ":")
-;;       (assoc "->" "=>")))))
-;;;; Raise an cl-assertion, TODO report bug 
+(require 'smie)
+(defvar dedukti-smie-grammar
+  (smie-prec2->grammar
+   (smie-bnf->prec2
+    '((id)
+      (prelude ("#NAME" "NAME")
+               ("#IMPORT" "NAME"))
+      (line ("NEWID" "TCOLON" term ".")
+            ("NEWID" ":=" term ".")
+            ("NEWID" "TCOLON" term ":=" term ".")
+            ("{" "OPAQUEID" "}" ":=" term ".")
+            ("{" "OPAQUEID" "}" "TCOLON" term ":=" term ".")
+            ("[" context "]" term "-->" term)
+            ("[" context "]" term "-->" term ".")
+            ("#ASSERT" term "=~" term "."))
+      (decl ("CID" "RCOLON" term))
+      (context (decl "," context)
+               (decl))
+      (tdecl ("ID" "LCOLON" term)
+             (term))
+      (term ("_")
+            (tdecl "->" term)
+            (tdecl "=>" term)))
+    '((assoc ",")
+      (assoc "->" "=>" "LCOLON")
+      ))))
 
-;; (defun dedukti-smie-setup ()
-;;   (smie-setup dedukti-smie-grammar rules-fun))
+(defun dedukti-smie-position ()
+  "Tell in what part of a Dedukti file point is.
+Return one of:
+- 'prelude when point is in a line starting by a `#'
+- 'context when point is in a rewrite context
+           and not inside a sub-term
+- 'opaque when point is inside braces
+- 'top when point is before the first `:' or `:=' of the line
+- nil otherwise"
+  (if (save-excursion
+        (back-to-indentation)
+        (looking-at "#"))
+      'prelude
+    (if (looking-back "[[,][^],:]*")
+        'context
+      (if (looking-back "{[^}]*")
+          'opaque
+        (if (looking-back "\\(#\\|\\.[^a-zA-Z0-9_]\\)[^.#:]*")
+            'top
+          nil)))))
 
-;; (add-hook 'dedukti-mode-hook 'dedukti-smie-setup)
+(defun dedukti-smie-position-debug ()
+  "Print the current value of `dedukti-smie-position'."
+  (interactive)
+  (prin1 (dedukti-smie-position)))
+
+;; (add-hook 'dedukti-mode-hook
+;;           (lambda () (local-set-key (kbd "<f9>") 'dedukti-smie-position-debug)))
+
+(defun dedukti-smie-forward-token ()
+  "Forward lexer for Dedukti."
+  (forward-comment (point-max))
+  (cond
+   ((looking-at (regexp-opt
+                 '(":="
+                   "-->"
+                   "->"
+                   "=>"
+                   ","
+                   "."
+                   "~="
+                   "["
+                   "]"
+                   "#NAME"
+                   "#IMPORT"
+                   "#ASSERT")))
+    (goto-char (match-end 0))
+    (match-string-no-properties 0))
+   ((looking-at ":")
+    ;; There are three kinds of colons in Dedukti and they can hardly
+    ;; be distinguished at parsing time;
+    ;; Colons can be used in rewrite contexts (RCOLON),
+    ;; in local bindings of -> and => (LCOLON)
+    ;; and at toplevel (TCOLON).
+    (prog1
+        (pcase (dedukti-smie-position)
+          (`context "RCOLON")
+          (`top "TCOLON")
+          (_ "LCOLON"))
+      (forward-char)))
+   ((looking-at dedukti-qid)
+    (goto-char (match-end 0))
+    (pcase (dedukti-smie-position)
+      (`prelude "NAME")
+      (`context "CID")
+      (`opaque "OPAQUEID")
+      (`top "NEWID")
+      (_ "ID")))
+   ((looking-at "(") nil)
+   (t (buffer-substring-no-properties
+       (point)
+       (progn (skip-syntax-forward "w_")
+              (point))))))
+
+(defun dedukti-forward ()
+  "Move forward by one token or by a sexp."
+  (interactive)
+  (let ((beg (point)))
+    (prog1
+        (or (dedukti-smie-forward-token)
+            (forward-sexp))
+      (when (eq beg (point))
+        (forward-char)))))
+
+(defun dedukti-smie-forward-debug ()
+  "Print the current value of `dedukti-smie-forward-token'."
+  (interactive)
+  (let ((v (dedukti-forward)))
+    (when v (princ v))))
+
+(add-hook 'dedukti-mode-hook
+          (lambda () (local-set-key (kbd "<C-right>")
+                                    'dedukti-forward)))
+
+
+(defun dedukti-smie-backward-token ()
+  "Backward lexer for Dedukti."
+  (forward-comment (- (point)))
+  (cond
+   ((looking-back (regexp-opt
+                 '(":="
+                   "-->"
+                   "->"
+                   "=>"
+                   ","
+                   "."
+                   "~="
+                   "["
+                   "]"
+                   "#NAME"
+                   "#IMPORT"
+                   "#ASSERT"))
+                  (- (point) 7))
+    (goto-char (match-beginning 0))
+    (match-string-no-properties 0))
+   ((looking-back ":")
+    (backward-char)
+    (pcase (dedukti-smie-position)
+      (`context "RCOLON")
+      (`top "TCOLON")
+      (_ "LCOLON")))
+   ((looking-back dedukti-qid-back nil t)
+    (goto-char (match-beginning 0))
+    (pcase (dedukti-smie-position)
+      (`prelude "NAME")
+      (`context "CID")
+      (`opaque "OPAQUEID")
+      (`top "NEWID")
+      (_ "ID")))
+   ((looking-back ")") nil)
+   (t (buffer-substring-no-properties
+       (point)
+       (progn (skip-syntax-backward "w_")
+              (point))))))
+
+(defun dedukti-backward ()
+  "Move backward by one token or by a sexp."
+  (interactive)
+  (let ((beg (point)))
+    (prog1
+        (or (dedukti-smie-backward-token)
+            (backward-sexp))
+      (when (eq beg (point))
+        (backward-char)))))
+
+(defun dedukti-smie-backward-debug ()
+  "Print the current value of `dedukti-smie-backward-token'."
+  (interactive)
+  (let ((v (dedukti-backward)))
+    (when v (princ v))))
+
+(add-hook 'dedukti-mode-hook
+          (lambda () (local-set-key (kbd "<C-left>")
+                                    'dedukti-backward)))
+
+(defcustom dedukti-indent-basic 2 "Basic indentation for dedukti-mode.")
+
+(defun dedukti-smie-rules (kind token)
+  "SMIE indentation rules for Dedukti.
+For the format of KIND and TOKEN, see `smie-rules-function'."
+  (pcase (cons kind token)
+    (`(:elem . basic) 0)
+    ;; End of line
+    (`(:after . "NAME") '(column . 0))
+    (`(:after . ".") '(column . 0))
+
+    ;; Rewrite-rules
+    (`(:before . "[") '(column . 0))
+    (`(:after . "]") (* 2 dedukti-indent-basic))
+    (`(:before . "-->") `(column . ,(* 3 dedukti-indent-basic)))
+    (`(:after . "-->") `(column . ,(* 2 dedukti-indent-basic)))
+    (`(,_ . ",") (smie-rule-separator kind))
+
+    ;; Toplevel
+    (`(:before . "TCOLON") (if (smie-rule-hanging-p)
+                               dedukti-indent-basic
+                             nil))
+    (`(:after . "TCOLON") 0)
+    (`(:before . ":=") 0)
+    (`(:after . ":=") dedukti-indent-basic)
+    ;; Terms
+    (`(:after . "->") 0)
+    (`(:after . "=>") 0)
+    (`(:after . "ID")
+     (unless (smie-rule-prev-p "ID") dedukti-indent-basic))
+    ))
+
+(defun dedukti-smie-setup ()
+  (smie-setup dedukti-smie-grammar
+              'dedukti-smie-rules
+              :forward-token 'dedukti-smie-forward-token
+              :backward-token 'dedukti-smie-backward-token
+              ))
+
+(add-hook 'dedukti-mode-hook 'dedukti-smie-setup)
+
+(defun dedukti-phrase-type ()
+  "Return the kind of phrase point is in.
+A list starting by one of the symbols `comment', `pragma', `rule', `decl',
+or `def' followed by two buffer positions for beginning and end of phrase."
+  (let ((start (point)) beg end)
+    (or
+     (save-excursion
+       (forward-char 2)
+       (when (re-search-backward "(;" nil t)
+         (setq beg (point))
+         (forward-char 2)
+         (re-search-forward ";)")
+         (setq end (point))
+         (when (>= end start)
+           `(comment ,beg ,end))))
+     (save-excursion
+       (back-to-indentation)
+       (when (looking-at "#")
+         (setq beg (point))
+         (end-of-line)
+         `(pragma ,beg ,(point))))
+     (save-excursion
+       (when (re-search-backward "\\[" nil t)
+         (setq beg (point))
+         (re-search-forward "-->")
+         (forward-sexp)
+         (re-search-forward "\\." nil t)
+         (setq end (point))
+         (when (> end start)
+           `(rule ,beg ,end))))
+     (save-excursion
+       (backward-char)
+       (when (re-search-forward "\\.[^a-zA-Z0-9_]" nil t)
+         (backward-char)
+         (setq end (point))
+         (backward-sexp)
+         (setq beg (point))
+         (if (re-search-forward ":=" end t)
+             `(def ,beg ,end)
+           `(decl ,beg ,end))))
+     )))
+
+(defun dedukti-phrase-type-debug ()
+  "Print the current value of `dedukti-phrase-type'."
+  (interactive)
+  (let* ((type (dedukti-phrase-type))
+         (ty (car type))
+         (beg (cadr type))
+         (end (caddr type)))
+    (prin1 ty)
+    (setq mark-active t)
+    (set-mark beg)
+    (goto-char end)))
+
+;; (add-hook 'dedukti-mode-hook
+;;           (lambda () (local-set-key (kbd "<f9>") 'dedukti-phrase-type-debug)))
+
+
+
+(defun dedukti-beginning-of-phrase ()
+  "Go to the beggining of the current phrase."
+  (interactive)
+  (goto-char (cadr (dedukti-phrase-type))))
+
+
+(defun dedukti-end-of-phrase ()
+  "Go to the end of the current phrase."
+  (interactive)
+  (goto-char (caddr (dedukti-phrase-type))))
+
+(add-hook 'dedukti-mode-hook
+          (lambda () (local-set-key (kbd "C-a") 'dedukti-beginning-of-phrase)))
+
+(add-hook 'dedukti-mode-hook
+          (lambda () (local-set-key (kbd "C-e") 'dedukti-end-of-phrase)))
+
+
+
+(defun dedukti-rule-context-at-point ()
+  "Return the rewrite-rule context of the rule under point."
+  (let (var type context)
+    (save-excursion
+      (dedukti-beginning-of-phrase)
+      (re-search-forward "\\[")
+      (while (not (looking-back "\\]"))
+        (forward-comment (point-max))
+        (looking-at dedukti-id)
+        (setq var (match-string-no-properties 0))
+        (goto-char (match-end 0))
+        (forward-comment (point-max))
+        (re-search-forward ":")
+        (forward-comment (point-max))
+        (re-search-forward "\\([^],]*\\)[],]")
+        (setq type (match-string-no-properties 1))
+        (add-to-list 'context (cons var type) t)))
+    context))
+
+(defun dedukti-goto-last-LCOLON ()
+  "Go to the last local colon and return the position."
+  (while (not (equal (dedukti-backward) "LCOLON")))
+  (point))
+
+(defun dedukti-context-at-point ()
+  "Return the Dedukti context at point.
+This is a list of cons cells (id . type)."
+  (let ((start (point))
+        phrase-beg var type context mid)
+    (save-excursion
+      (dedukti-beginning-of-phrase)
+      (setq phrase-beg (point)))
+    (save-excursion
+      (while (> (setq start (dedukti-goto-last-LCOLON)) phrase-beg)
+        (forward-comment (- (point)))
+        (looking-back dedukti-id nil t)
+        (setq var (match-string-no-properties 0))
+        (goto-char (match-end 0))
+        (forward-comment (point-max))
+        (re-search-forward ":")
+        (forward-comment (point-max))
+        (setq mid (point))
+        (forward-sexp)
+        (setq type (buffer-substring-no-properties mid (point)))
+        (add-to-list 'context (cons var type))
+        (goto-char start)
+        ))
+    context))
+
+(defun dedukti-insert-context (context)
+  "Insert CONTEXT as dedukti declarations.
+CONTEXT is a list of cons cells of strings."
+  (dolist (cons context)
+    (insert (car cons) " : " (cdr cons) ".\n")))
+
+(defun dedukti-reduce (beg end)
+  "Call dedukti to reduce the selected term and replace it in place."
+  (interactive "r")
+  (let* ((phrase-type (dedukti-phrase-type))
+         (rulep (eq (car phrase-type) 'rule))
+         (phrase-beg (cadr phrase-type))
+         (buffer (current-buffer))
+         (rule-context (when rulep (dedukti-rule-context-at-point)))
+         (context (dedukti-context-at-point))
+         (term (buffer-substring-no-properties beg end)))
+    (with-temp-file "tmp.dk"
+      (erase-buffer)
+      (insert-buffer-substring buffer nil phrase-beg)
+      (insert "\n")
+      (dedukti-insert-context rule-context)
+      (dedukti-insert-context context)
+      (insert ":= " term "."))
+    (goto-char beg)
+    (delete-region beg end)
+    (setq term (replace-regexp-in-string
+                "\\[[0-9]+\\]"
+                ""
+                (shell-command-to-string "dkcheck -q -r -nc tmp.dk 2> /dev/null")
+                nil
+                t))
+    (insert "(" term ")")))
 
 (provide 'dedukti-mode)
 
