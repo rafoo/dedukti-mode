@@ -491,7 +491,9 @@ or `def' followed by two buffer positions for beginning and end of phrase."
 
 (defun dedukti-goto-last-LCOLON ()
   "Go to the last local colon and return the position."
-  (while (not (equal (dedukti-backward) "LCOLON")))
+  (while (and
+          (> (point) (point-min))
+          (not (equal (dedukti-backward) "LCOLON"))))
   (point))
 
 (defun dedukti-context-at-point ()
@@ -525,9 +527,18 @@ CONTEXT is a list of cons cells of strings."
   (dolist (cons context)
     (insert (car cons) " : " (cdr cons) ".\n")))
 
-(defun dedukti-reduce (beg end)
-  "Call dedukti to reduce the selected term and replace it in place."
-  (interactive "r")
+(defun dedukti-remove-debrujn (s)
+  "Return a copy of string S without DeBrujn indices."
+  (replace-regexp-in-string "\\[[0-9]+\\]" "" s nil t))
+
+(defun dedukti-remove-newline (s)
+  "Return a copy of string S without newlines."
+  (replace-regexp-in-string "\n" "" s nil t))
+
+(defun dedukti-eval-term-to-string (beg end &optional reduction-command)
+  "Call dedukti to reduce the selected term and return it as a string.
+REDUCTION-COMMAND is used to control the reduction strategy,
+it defaults to `dedukti-reduction-command'."
   (let* ((phrase-type (dedukti-phrase-type))
          (rulep (eq (car phrase-type) 'rule))
          (phrase-beg (cadr phrase-type))
@@ -541,16 +552,65 @@ CONTEXT is a list of cons cells of strings."
       (insert "\n")
       (dedukti-insert-context rule-context)
       (dedukti-insert-context context)
-      (insert (format dedukti-reduction-command term)))
+      (insert (format (or
+                       reduction-command
+                       dedukti-reduction-command)
+                      term)))
     (goto-char beg)
+    (dedukti-remove-newline
+     (dedukti-remove-debrujn
+      (shell-command-to-string "dkcheck -q -r -nc tmp.dk 2> /dev/null")))))
+
+(defun dedukti-eval (beg end &optional reduction-command)
+  "Call dedukti to reduce the selected term and display the result in the echo area.
+REDUCTION-COMMAND is used to control the reduction strategy,
+it defaults to `dedukti-reduction-command'."
+  (interactive "r\nsreduction command: ")
+  (message (dedukti-eval-term-to-string beg end reduction-command)))
+
+(defun dedukti-hnf (beg end &optional reduction-command)
+  "Call dedukti to reduce the selected term in head normal form and display the result in the echo area."
+  (interactive "r")
+  (message (dedukti-eval-term-to-string beg end ":= %s.")))
+
+(defun dedukti-wnf (beg end &optional reduction-command)
+  "Call dedukti to reduce the selected term in weak normal form and display the result in the echo area."
+  (interactive "r")
+  (message (dedukti-eval-term-to-string beg end "#WNF %s.")))
+
+(defun dedukti-snf (beg end &optional reduction-command)
+  "Call dedukti to reduce the selected term in strong normal form and display the result in the echo area."
+  (interactive "r")
+  (message (dedukti-eval-term-to-string beg end "#SNF %s.")))
+
+(defun dedukti-reduce (beg end reduction-command)
+  "Call dedukti to reduce the selected term and replace it in place.
+REDUCTION-COMMAND is used to control the reduction strategy,
+see variable `dedukti-reduction-command' for details.
+The term is displayed in parens."
+  (interactive "r\nsreduction command: ")
+  (let ((result (dedukti-eval-term-to-string beg end reduction-command)))
     (delete-region beg end)
-    (setq term (replace-regexp-in-string
-                "\\[[0-9]+\\]"
-                ""
-                (shell-command-to-string "dkcheck -q -r -nc tmp.dk 2> /dev/null")
-                nil
-                t))
-    (insert "(" term ")")))
+    (insert "(" result ")")))
+
+(defun dedukti-reduce-hnf (beg end)
+  "Call dedukti to reduce in head normal form the selected term and replace it in place.
+The term is displayed in parens."
+  (interactive "r")
+  (dedukti-reduce beg end ":= %s."))
+
+(defun dedukti-reduce-wnf (beg end)
+  "Call dedukti to reduce in weak normal form the selected term and replace it in place.
+The term is displayed in parens."
+  (interactive "r")
+  (dedukti-reduce beg end "#WNF %s."))
+
+(defun dedukti-reduce-snf (beg end)
+  "Call dedukti to reduce in strong normal form the selected term and replace it in place.
+The term is displayed in parens."
+  (interactive "r")
+  (dedukti-reduce beg end "#SNF %s."))
+
 
 (provide 'dedukti-mode)
 
