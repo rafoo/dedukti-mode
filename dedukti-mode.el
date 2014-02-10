@@ -611,6 +611,19 @@ The term is displayed in parens."
   (interactive "r")
   (dedukti-reduce beg end "#SNF %s."))
 
+(defun dedukti-insert-check ()
+  "Insert the error message of dkcheck at point."
+  (interactive)
+  (let ((s (shell-command-to-string
+            (format
+             "dkcheck -q -r -nc %s"
+             (buffer-file-name)))))
+    (setq s (dedukti-remove-debrujn s))
+    (setq s (replace-regexp-in-string "\n" ".\n" s nil t))
+    (setq s (replace-regexp-in-string "\\(ERROR.*context:.\\)" "(; \\1 ;)" s))
+    (setq s (replace-regexp-in-string " type:" "_type :=" s nil t))
+    (insert s)))
+
 
 (provide 'dedukti-mode)
 
