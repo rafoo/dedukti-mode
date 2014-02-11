@@ -611,6 +611,17 @@ The term is displayed in parens."
   (interactive "r")
   (dedukti-reduce beg end "#SNF %s."))
 
+(defun dedukti-step-before ()
+  "Call `dedukti-reduce-step' before point."
+  (interactive)
+  (let ((end (point)))
+    (backward-sexp)
+    (dedukti-reduce (point) end "#STEP %s.")))
+
+(add-hook 'dedukti-mode-hook
+          (lambda () (local-set-key (kbd "<f8>")
+                                    'dedukti-step-before)))
+
 (defun dedukti-insert-check ()
   "Insert the error message of dkcheck at point."
   (interactive)
