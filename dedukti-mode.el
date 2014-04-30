@@ -109,6 +109,9 @@ expressions of the form `.id' are allowed.")
   nil
   "Major mode for editing Dedukti source code files.")
 
+;;;###autoload
+(add-to-list 'auto-mode-alist '("\\.dk\\'" . dedukti-mode))
+
 ;; Error handling
 
 ;; Errors from the compilation buffer
