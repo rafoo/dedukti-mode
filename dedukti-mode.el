@@ -145,28 +145,6 @@ If no file is given, compile the file associated with the current buffer."
 (add-hook 'dedukti-mode-hook
           (lambda () (local-set-key (kbd "C-c C-c") 'compile)))
 
-;; Optional: flycheck integration
-
-(when (require 'flycheck nil t)
-
-  (flycheck-define-checker dedukti
-    "Dedukti type checker."
-    :command ("dkcheck"
-              (eval dedukti-check-options)
-              source-inplace)
-    :error-patterns
-    ((warning
-        line-start "WARNING file:" (file-name) " line:" line " column:" column (message) line-end)
-     (error
-        line-start "ERROR file:"   (file-name) " line:" line " column:" column (message) line-end))
-    :modes dedukti-mode)
-
-  (add-to-list 'flycheck-checkers 'dedukti)
-
-  (add-hook 'dedukti-mode-hook 'flycheck-mode)
-
-  )
-
 ;; Indentation
 
 (require 'smie)
