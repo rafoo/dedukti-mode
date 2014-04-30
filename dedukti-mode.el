@@ -17,6 +17,10 @@
 
 ;;; Code:
 
+(require 'generic-x)
+(require 'compile)
+(require 'smie)
+
 ;; Customization
 
 (defgroup dedukti nil
@@ -44,8 +48,6 @@ Typical values are \":= %s.\" for head normalisation and
 \"#SNF (%s).\" for strong normalisation.")
 
 ;; Generic major mode
-
-(require 'generic-x)
 
 (defvar dedukti-id
   "[_a-zA-Z0-9][_a-zA-Z0-9!?']*"
@@ -111,8 +113,6 @@ expressions of the form `.id' are allowed.")
 
 ;; Errors from the compilation buffer
 
-(require 'compile)
-
 (add-to-list 'compilation-error-regexp-alist
     `(,(format
         "^ERROR file:\\(%s.dk\\) line:\\([0-9]+\\) column:\\([0-9]+\\)"
@@ -147,7 +147,6 @@ If no file is given, compile the file associated with the current buffer."
 
 ;; Indentation
 
-(require 'smie)
 (defvar dedukti-smie-grammar
   (smie-prec2->grammar
    (smie-bnf->prec2
