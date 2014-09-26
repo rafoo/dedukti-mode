@@ -196,26 +196,34 @@ If no file is given, compile the file associated with the current buffer."
       (assoc "->" "=>" "LCOLON")
       ))))
 
+(defun dedukti-smie-pragmap ()
+  "Return non-nil if point is on a pragma line.
+A pragma line is a line starting with a sharp (#) character."
+  (save-excursion
+    (back-to-indentation)
+    (looking-at "#")))
+
 (defun dedukti-smie-position ()
   "Tell in what part of a Dedukti file point is.
 Return one of:
-- 'prelude when point is in a line starting by a `#'
+- 'comment when point is inside a comment
+- 'pragma when point is in a line starting by a `#'
 - 'context when point is in a rewrite context
            and not inside a sub-term
 - 'opaque when point is inside braces
 - 'top when point is before the first `:' or `:=' of the line
 - nil otherwise"
-  (if (save-excursion
-        (back-to-indentation)
-        (looking-at "#"))
-      'prelude
-    (if (looking-back "[[,][^],:]*")
-        'context
-      (if (looking-back "{[^}]*")
-          'opaque
-        (if (looking-back "\\(#\\|\\.[^a-zA-Z0-9_]\\)[^.#:]*")
-            'top
-          nil)))))
+  (cond
+   ((nth 4 (syntax-ppss))
+    'comment)
+   ((dedukti-smie-pragmap)
+    'pragma)
+   ((looking-back "[[,][^],:]*")
+    'context)
+   ((looking-back "{[^}]*")
+    'opaque)
+   ((looking-back "\\(#\\|\\.[^a-zA-Z0-9_]\\)[^.#:]*")
+    'top)))
 
 (defun dedukti-smie-position-debug ()
   "Print the current value of `dedukti-smie-position'."
@@ -259,7 +267,7 @@ Return one of:
    ((looking-at dedukti-qid)
     (goto-char (match-end 0))
     (pcase (dedukti-smie-position)
-      (`prelude "NAME")
+      (`pragma "NAME")
       (`context "CID")
       (`opaque "OPAQUEID")
       (`top "NEWID")
@@ -315,7 +323,7 @@ Return one of:
    ((looking-back dedukti-qid-back nil t)
     (goto-char (match-beginning 0))
     (pcase (dedukti-smie-position)
-      (`prelude "NAME")
+      (`pragma "NAME")
       (`context "CID")
       (`opaque "OPAQUEID")
       (`top "NEWID")
@@ -386,102 +394,60 @@ For the format of KIND and TOKEN, see `smie-rules-function'."
 
 (add-hook 'dedukti-mode-hook 'dedukti-smie-setup)
 
-(defun dedukti-phrase-type ()
-  "Return the kind of phrase point is in.
-A list starting by one of the symbols `comment', `pragma', `rule', `decl',
-or `def' followed by two buffer positions for beginning and end of phrase."
-  (let ((start (point)) beg end)
-    (or
-     (save-excursion
-       (forward-char 2)
-       (when (re-search-backward "(;" nil t)
-         (setq beg (point))
-         (forward-char 2)
-         (re-search-forward ";)")
-         (setq end (point))
-         (when (>= end start)
-           `(comment ,beg ,end))))
-     (save-excursion
-       (back-to-indentation)
-       (when (looking-at "#")
-         (setq beg (point))
-         (end-of-line)
-         `(pragma ,beg ,(point))))
-     (save-excursion
-       (when (re-search-backward "\\[" nil t)
-         (setq beg (point))
-         (re-search-forward "-->")
-         (forward-sexp)
-         (re-search-forward "\\." nil t)
-         (setq end (point))
-         (when (> end start)
-           `(rule ,beg ,end))))
-     (save-excursion
-       (backward-char)
-       (when (re-search-forward "\\.[^a-zA-Z0-9_]" nil t)
-         (backward-char)
-         (setq end (point))
-         (backward-sexp)
-         (setq beg (point))
-         (if (re-search-forward ":=" end t)
-             `(def ,beg ,end)
-           `(decl ,beg ,end))))
-     )))
-
-(defun dedukti-phrase-type-debug ()
-  "Print the current value of `dedukti-phrase-type'."
-  (interactive)
-  (let* ((type (dedukti-phrase-type))
-         (ty (car type))
-         (beg (cadr type))
-         (end (caddr type)))
-    (prin1 ty)
-    (setq mark-active t)
-    (set-mark beg)
-    (goto-char end)))
-
-;; (add-hook 'dedukti-mode-hook
-;;           (lambda () (local-set-key (kbd "<f9>") 'dedukti-phrase-type-debug)))
-
-
+(defun dedukti-rulep ()
+  "Return non-nil if point is in a rewrite-rule.
+The return value is a list (STARTCTX ENDCTX ARR END) where
+STARTCTX is the position of the beginning of the phrase,
+         before the opening bracket,
+ENDCTX is the position of the end of the context,
+       after the closing bracket,
+ARR is the position of the beginning of the rewrite arrow,
+END is the position just after the dot closing the rewrite-rule group."
+  (let (startctx endctx arr end)
+    (save-excursion
+      (and
+       (re-search-backward "\\[" nil t)
+       (setq startctx (point))
+       (re-search-forward "\\]" nil t)
+       (setq endctx (point))
+       (re-search-forward "-->" nil t)
+       (setq arr (- (point) 3))
+       (re-search-forward "\\.[^a-zA-Z0-9_]" nil t)
+       (setq end (- (point) 1))
+       (list startctx endctx arr end)))))
 
 (defun dedukti-beginning-of-phrase ()
-  "Go to the beggining of the current phrase."
+  "Go to beginning of current phrase or rewrite-rule."
   (interactive)
-  (goto-char (cadr (dedukti-phrase-type))))
-
-
-(defun dedukti-end-of-phrase ()
-  "Go to the end of the current phrase."
-  (interactive)
-  (goto-char (caddr (dedukti-phrase-type))))
-
-(add-hook 'dedukti-mode-hook
-          (lambda () (local-set-key (kbd "C-a") 'dedukti-beginning-of-phrase)))
-
-(add-hook 'dedukti-mode-hook
-          (lambda () (local-set-key (kbd "C-e") 'dedukti-end-of-phrase)))
-
-
+  (let (rulep (dedukti-rulep))
+    (cond
+     (rulep (goto-char (car rulep)))
+     ((dedukti-smie-pragmap) (back-to-indentation))
+     ((re-search-backward "\\.[^a-zA-Z0-9_]" nil t)
+      (forward-char))
+     (t                  ; Could append on a comment before the first line
+      (back-to-indentation)))))
 
 (defun dedukti-rule-context-at-point ()
   "Return the rewrite-rule context of the rule under point."
-  (let (var type context)
-    (save-excursion
-      (dedukti-beginning-of-phrase)
-      (re-search-forward "\\[")
-      (while (not (looking-back "\\]"))
-        (forward-comment (point-max))
-        (looking-at dedukti-id)
-        (setq var (match-string-no-properties 0))
-        (goto-char (match-end 0))
-        (forward-comment (point-max))
-        (re-search-forward ":")
-        (forward-comment (point-max))
-        (re-search-forward "\\([^],]*\\)[],]")
-        (setq type (match-string-no-properties 1))
-        (add-to-list 'context (cons var type) t)))
-    context))
+  (let ((rulep (dedukti-rulep))
+        var type context)
+    (when rulep
+      (save-excursion
+        (goto-char (car rulep))
+        (re-search-forward "\\[")
+        (while (not (looking-back "\\]"))
+          (forward-comment (point-max))
+          (looking-at dedukti-id)
+          (setq var (match-string-no-properties 0))
+          (goto-char (match-end 0))
+          (forward-comment (point-max))
+          (re-search-forward ":")
+          (forward-comment (point-max))
+          (re-search-forward "\\([^],]*\\)[],]")
+          (setq type (match-string-no-properties 1))
+          (add-to-list 'context (cons var type) t)))
+      context)))
 
 (defun dedukti-goto-last-LCOLON ()
   "Go to the last local colon and return the position."
@@ -535,9 +501,8 @@ CONTEXT is a list of cons cells of strings."
 BEG and END are the positions delimiting the term.
 REDUCTION-COMMAND is used to control the reduction strategy,
 it defaults to `dedukti-reduction-command'."
-  (let* ((phrase-type (dedukti-phrase-type))
-         (rulep (eq (car phrase-type) 'rule))
-         (phrase-beg (cadr phrase-type))
+  (let* ((rulep (dedukti-rulep))
+         (phrase-beg (save-excursion (dedukti-beginning-of-phrase) (point)))
          (buffer (current-buffer))
          (rule-context (when rulep (dedukti-rule-context-at-point)))
          (context (dedukti-context-at-point))
@@ -567,23 +532,34 @@ it defaults to `dedukti-reduction-command'."
   (interactive "r\nsreduction command: ")
   (message (dedukti-eval-term-to-string beg end reduction-command)))
 
-(defun dedukti-hnf (beg end &optional reduction-command)
-  "Call dedukti to reduce the selected term in head normal form and display the result in the echo area."
+(defun dedukti-hnf (beg end)
+  "Call Dedukti to reduce the selected term in head normal form.
+The result is displayed in the echo area.
+BEG and END are the positions delimiting the term.
+When called interactively, they are set to the region limits."
   (interactive "r")
   (message (dedukti-eval-term-to-string beg end ":= %s.")))
 
-(defun dedukti-wnf (beg end &optional reduction-command)
-  "Call dedukti to reduce the selected term in weak normal form and display the result in the echo area."
+(defun dedukti-wnf (beg end)
+  "Call Dedukti to reduce the selected term in weak normal form.
+The result is displayed in the echo area.
+BEG and END are the positions delimiting the term.
+When called interactively, they are set to the region limits."
   (interactive "r")
   (message (dedukti-eval-term-to-string beg end "#WNF %s.")))
 
-(defun dedukti-snf (beg end &optional reduction-command)
-  "Call dedukti to reduce the selected term in strong normal form and display the result in the echo area."
+(defun dedukti-snf (beg end)
+  "Call Dedukti to reduce the selected term in string normal form.
+The result is displayed in the echo area.
+BEG and END are the positions delimiting the term.
+When called interactively, they are set to the region limits."
   (interactive "r")
   (message (dedukti-eval-term-to-string beg end "#SNF %s.")))
 
 (defun dedukti-reduce (beg end reduction-command)
-  "Call dedukti to reduce the selected term and replace it in place.
+  "Call Dedukti to reduce the selected term and replace it in place.
+BEG and END are the positions delimiting the term.
+When called interactively, they are set to the region limits.
 REDUCTION-COMMAND is used to control the reduction strategy,
 see variable `dedukti-reduction-command' for details.
 The term is displayed in parens."
@@ -593,20 +569,23 @@ The term is displayed in parens."
     (insert "(" result ")")))
 
 (defun dedukti-reduce-hnf (beg end)
-  "Call dedukti to reduce in head normal form the selected term and replace it in place.
-The term is displayed in parens."
+  "Same as `dedukti-reduce' using head reduction.
+BEG and END are the positions delimiting the term.
+When called interactively, they are set to the region limits."
   (interactive "r")
   (dedukti-reduce beg end ":= %s."))
 
 (defun dedukti-reduce-wnf (beg end)
-  "Call dedukti to reduce in weak normal form the selected term and replace it in place.
-The term is displayed in parens."
+  "Same as `dedukti-reduce' using weak head reduction.
+BEG and END are the positions delimiting the term.
+When called interactively, they are set to the region limits."
   (interactive "r")
   (dedukti-reduce beg end "#WNF %s."))
 
 (defun dedukti-reduce-snf (beg end)
-  "Call dedukti to reduce in strong normal form the selected term and replace it in place.
-The term is displayed in parens."
+  "Same as `dedukti-reduce' using strong reduction.
+BEG and END are the positions delimiting the term.
+When called interactively, they are set to the region limits."
   (interactive "r")
   (dedukti-reduce beg end "#SNF %s."))
 
