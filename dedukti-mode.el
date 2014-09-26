@@ -10,7 +10,7 @@
 ;; This file defines a major mode for editing Dedukti files.
 ;; Dedukti is a type checker for the lambda-Pi-calculus modulo.
 ;; It is a free software under the CeCILL-B license.
-;; Dedukti is available at the following url:
+;; Dedukti is available at the following URL:
 ;; <https://www.rocq.inria.fr/deducteam/Dedukti/>
 
 ;; This major mode is defined using the generic major mode mechanism.
@@ -33,19 +33,19 @@
   :type '(file :must-match t))
 
 (defcustom dedukti-compile-options '("-nc" "-e")
-  "Options to pass to dedukti to compile files."
+  "Options to pass to Dedukti to compile files."
   :group 'dedukti
   :type '(list string))
 
 (defcustom dedukti-check-options '("-nc")
-  "Options to pass to dedukti to typecheck files."
+  "Options to pass to Dedukti to typecheck files."
   :group 'dedukti
   :type '(list string))
 
 (defcustom dedukti-reduction-command ":= %s."
-  "Format of the dedukti command used for reduction.
-Typical values are \":= %s.\" for head normalisation and
-\"#SNF (%s).\" for strong normalisation.")
+  "Format of the Dedukti command used for reduction.
+Typical values are \":= %s.\" for head normalization and
+\"#SNF (%s).\" for strong normalization.")
 
 ;; Generic major mode
 
@@ -67,7 +67,7 @@ Typical values are \":= %s.\" for head normalisation and
   (format "\\(\\(%s\\)?\\.\\)?%s"
           dedukti-qualifier
           dedukti-id)
-  "Regexp matching Dedukti qualified identifiers backward.
+  "Regexp matching Dedukti qualified identifiers and their suffixes backward.
 Since characters are added one by one,
 expressions of the form `.id' are allowed.")
 
@@ -82,26 +82,34 @@ expressions of the form `.id' are allowed.")
     "{" "}"     ; Dot patterns and opaque definitions
     ","         ; Environment separator
     "."         ; Global context separator
-    "~="        ; Converstion test
+    "~="        ; Conversion test
     )
   "List of non-alphabetical Dedukti keywords.")
 
 ;;;###autoload
 (define-generic-mode
   dedukti-mode
-  '(("(;".";)"))                             ;; comments
-  '("Type")                                  ;; keywords
+  ;; Comments in Dedukti are enclosed by "(;" and ";)"
+  '(("(;" . ";)"))
+  ;; The only alphabetical keyword in Dedukti is the constant Type
+  '("Type")
+  ;; Font-locking:
   `(
+    ;; Pragmas are highlighted using preprocessor-face
     (,(format "^ *#\\(IMPORT\\|NAME\\|ASSERT\\)[ \t]+%s" dedukti-qualifier) .
-     'font-lock-preprocessor-face)           ;; pragmas
+     'font-lock-preprocessor-face)
+    ;; Declared and defined symbols are highlighted using function-name-face
     (,(format "^ *%s *:=?" dedukti-id) .
-     'font-lock-function-name-face)          ;; declarations and definitions
+     'font-lock-function-name-face)
+    ;; Variables in binders are also highlighted using function-name-face
     (,(format "%s *:[^=]" dedukti-id) .
-     'font-lock-function-name-face)          ;; variable name in lambdas and pis
+     'font-lock-function-name-face)
+    ;; Identifiers are highlighted differently whether they are qualified
     (,(format "%s\\.%s" dedukti-qualifier dedukti-id) .
      'font-lock-constant-face)               ;; qualified identifiers
     (,dedukti-id .
      'font-lock-variable-name-face)          ;; identifiers
+    ;; Non-alphabetic keywords are highlighted using keyword-face
     (,(regexp-opt dedukti-symbolic-keywords)
      . 'font-lock-keyword-face)
     )
@@ -109,6 +117,8 @@ expressions of the form `.id' are allowed.")
   nil
   "Major mode for editing Dedukti source code files.")
 
+;; This duplicates the last line of the mode definition
+;; but is needed for auto-loading
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.dk\\'" . dedukti-mode))
 
@@ -120,13 +130,21 @@ expressions of the form `.id' are allowed.")
     `(,(format
         "^ERROR file:\\(%s.dk\\) line:\\([0-9]+\\) column:\\([0-9]+\\)"
         dedukti-qualifier)
-      1 2 3 2))
+      1                                 ; file is the first group of the regexp
+      2                                 ; line number is the second
+      3                                 ; column number is the third
+      2                                 ; level is 2 (error)
+      ))
 
 (add-to-list 'compilation-error-regexp-alist
     `(,(format
         "^WARNING file:\\(%s.dk\\) line:\\([0-9]+\\) column:\\([0-9]+\\)"
         dedukti-qualifier)
-      1 2 3 1))
+      1                                 ; file is the first group of the regexp
+      2                                 ; line number is the second
+      3                                 ; column number is the third
+      1                                 ; level is 1 (warning)
+      ))
 
 ;; Calling Dedukti
 
@@ -135,7 +153,7 @@ expressions of the form `.id' are allowed.")
 If no file is given, compile the file associated with the current buffer."
   (interactive)
   (let ((file (or file (buffer-file-name))))
-    (when file
+    (when file    ; if current buffer is not linked to a file, do nothing
       (eval `(start-process
               "Dedukti compiler"
               ,(get-buffer-create "*Dedukti Compiler*")
@@ -149,6 +167,8 @@ If no file is given, compile the file associated with the current buffer."
           (lambda () (local-set-key (kbd "C-c C-c") 'compile)))
 
 ;; Indentation
+
+;; This is a simplified grammar for Dedukti in SMIE format
 
 (defvar dedukti-smie-grammar
   (smie-prec2->grammar
@@ -202,13 +222,12 @@ Return one of:
   (interactive)
   (prin1 (dedukti-smie-position)))
 
-;; (add-hook 'dedukti-mode-hook
-;;           (lambda () (local-set-key (kbd "<f9>") 'dedukti-smie-position-debug)))
-
 (defun dedukti-smie-forward-token ()
   "Forward lexer for Dedukti."
+  ;; Skip comments
   (forward-comment (point-max))
   (cond
+   ;; Simple tokens
    ((looking-at (regexp-opt
                  '(":="
                    "-->"
@@ -236,6 +255,7 @@ Return one of:
           (`top "TCOLON")
           (_ "LCOLON"))
       (forward-char)))
+   ;; Identifier: discard the name and return its kind
    ((looking-at dedukti-qid)
     (goto-char (match-end 0))
     (pcase (dedukti-smie-position)
@@ -265,11 +285,6 @@ Return one of:
   (interactive)
   (let ((v (dedukti-forward)))
     (when v (princ v))))
-
-(add-hook 'dedukti-mode-hook
-          (lambda () (local-set-key (kbd "<C-right>")
-                                    'dedukti-forward)))
-
 
 (defun dedukti-smie-backward-token ()
   "Backward lexer for Dedukti."
@@ -327,10 +342,6 @@ Return one of:
   (let ((v (dedukti-backward)))
     (when v (princ v))))
 
-(add-hook 'dedukti-mode-hook
-          (lambda () (local-set-key (kbd "<C-left>")
-                                    'dedukti-backward)))
-
 (defcustom dedukti-indent-basic 2 "Basic indentation for dedukti-mode.")
 
 (defun dedukti-smie-rules (kind token)
@@ -363,7 +374,10 @@ For the format of KIND and TOKEN, see `smie-rules-function'."
      (unless (smie-rule-prev-p "ID") dedukti-indent-basic))
     ))
 
+;; Standard SMIE installation
+
 (defun dedukti-smie-setup ()
+  "SMIE installation for the Dedukti grammar and major mode."
   (smie-setup dedukti-smie-grammar
               'dedukti-smie-rules
               :forward-token 'dedukti-smie-forward-token
@@ -478,7 +492,8 @@ or `def' followed by two buffer positions for beginning and end of phrase."
 
 (defun dedukti-context-at-point ()
   "Return the Dedukti context at point.
-This is a list of cons cells (id . type)."
+This is a list of cons cells (id . type).
+The context is the list of local bindings."
   (let ((start (point))
         phrase-beg var type context mid)
     (save-excursion
@@ -516,7 +531,8 @@ CONTEXT is a list of cons cells of strings."
   (replace-regexp-in-string "\n" "" s nil t))
 
 (defun dedukti-eval-term-to-string (beg end &optional reduction-command)
-  "Call dedukti to reduce the selected term and return it as a string.
+  "Call Dedukti to reduce the selected term and return it as a string.
+BEG and END are the positions delimiting the term.
 REDUCTION-COMMAND is used to control the reduction strategy,
 it defaults to `dedukti-reduction-command'."
   (let* ((phrase-type (dedukti-phrase-type))
@@ -542,7 +558,10 @@ it defaults to `dedukti-reduction-command'."
       (shell-command-to-string "dkcheck -q -r -nc tmp.dk 2> /dev/null")))))
 
 (defun dedukti-eval (beg end &optional reduction-command)
-  "Call dedukti to reduce the selected term and display the result in the echo area.
+  "Call Dedukti to reduce the selected term.
+The result is displayed in the echo area.
+BEG and END are the positions delimiting the term.
+When called interactively, they are set to the region limits.
 REDUCTION-COMMAND is used to control the reduction strategy,
 it defaults to `dedukti-reduction-command'."
   (interactive "r\nsreduction command: ")
