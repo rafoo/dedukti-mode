@@ -520,7 +520,7 @@ it defaults to `dedukti-reduction-command'."
     (goto-char beg)
     (dedukti-remove-newline
      (dedukti-remove-debrujn
-      (shell-command-to-string "dkcheck -q -r -nc tmp.dk 2> /dev/null")))))
+      (shell-command-to-string "dkcheck -r -nc tmp.dk 2> /dev/null")))))
 
 (defun dedukti-eval (beg end &optional reduction-command)
   "Call Dedukti to reduce the selected term.
@@ -605,7 +605,7 @@ When called interactively, they are set to the region limits."
   (interactive)
   (let ((s (shell-command-to-string
             (format
-             "dkcheck -q -r -nc %s"
+             "dkcheck -r -nc %s"
              (buffer-file-name)))))
     (setq s (dedukti-remove-debrujn s))
     (setq s (replace-regexp-in-string "\n" ".\n" s nil t))
