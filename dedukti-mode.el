@@ -91,8 +91,8 @@ expressions of the form `.id' are allowed.")
   dedukti-mode
   ;; Comments in Dedukti are enclosed by "(;" and ";)"
   '(("(;" . ";)"))
-  ;; The only alphabetical keyword in Dedukti is the constant Type
-  '("Type")
+  ;; The alphabetical keywords in Dedukti: Type and def
+  '("Type" "def")
   ;; Font-locking:
   `(
     ;; Pragmas are highlighted using preprocessor-face
@@ -177,8 +177,9 @@ If no file is given, compile the file associated with the current buffer."
       (prelude ("#NAME" "NAME")
                ("#IMPORT" "NAME"))
       (line ("NEWID" "TCOLON" term ".")
-            ("NEWID" ":=" term ".")
-            ("NEWID" "TCOLON" term ":=" term ".")
+            ("def" "NEWID" "TCOLON" term ".")
+            ("def" "NEWID" ":=" term ".")
+            ("def" "NEWID" "TCOLON" term ":=" term ".")
             ("{" "OPAQUEID" "}" ":=" term ".")
             ("{" "OPAQUEID" "}" "TCOLON" term ":=" term ".")
             ("[" context "]" term "-->" term)
