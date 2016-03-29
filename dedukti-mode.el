@@ -42,10 +42,10 @@
   :group 'dedukti
   :type '(list string))
 
-(defcustom dedukti-reduction-command ":= %s."
+(defcustom dedukti-reduction-command "#SNF %s."
   "Format of the Dedukti command used for reduction.
-Typical values are \":= %s.\" for head normalization and
-\"#SNF (%s).\" for strong normalization.")
+Typical values are \"#WHNF %s.\" for head normalization and
+\"#SNF %s.\" for strong normalization.")
 
 ;; Generic major mode
 
@@ -79,7 +79,7 @@ expressions of the form `.id' are allowed.")
     "=>"        ; Lambda (function constructor)
     "\\[" "\\]" ; Rewrite-rule environment
     "(" ")"     ; Expression grouping
-    "{" "}"     ; Dot patterns and opaque definitions
+    "{" "}"     ; Dot patterns
     ","         ; Environment separator
     "."         ; Global context separator
     "~="        ; Conversion test
@@ -91,15 +91,19 @@ expressions of the form `.id' are allowed.")
   dedukti-mode
   ;; Comments in Dedukti are enclosed by "(;" and ";)"
   '(("(;" . ";)"))
-  ;; The alphabetical keywords in Dedukti: Type and def
-  '("Type" "def")
+  ;; The alphabetical keywords in Dedukti: Type, def, and thm
+  '("Type" "def" "thm")
   ;; Font-locking:
   `(
     ;; Pragmas are highlighted using preprocessor-face
     (,(format "^ *#\\(IMPORT\\|NAME\\|ASSERT\\)[ \t]+%s" dedukti-qualifier) .
      'font-lock-preprocessor-face)
     ;; Declared and defined symbols are highlighted using function-name-face
-    (,(format "^ *%s *:=?" dedukti-id) .
+    (,(format "^ *def *%s *:=?" dedukti-id) .
+     'font-lock-function-name-face)
+    (,(format "^ *thm *%s *:=" dedukti-id) .
+     'font-lock-function-name-face)
+    (,(format "^ *%s *:[^=]" dedukti-id) .
      'font-lock-function-name-face)
     ;; Variables in binders are also highlighted using function-name-face
     (,(format "%s *:[^=]" dedukti-id) .
@@ -174,20 +178,17 @@ If no file is given, compile the file associated with the current buffer."
   (smie-prec2->grammar
    (smie-bnf->prec2
     '((id)
-      (prelude ("#NAME" "NAME")
-               ("#IMPORT" "NAME"))
+      (prelude ("#NAME" "NAME"))
       (line ("NEWID" "TCOLON" term ".")
             ("def" "NEWID" "TCOLON" term ".")
             ("def" "NEWID" ":=" term ".")
             ("def" "NEWID" "TCOLON" term ":=" term ".")
-            ("{" "OPAQUEID" "}" ":=" term ".")
-            ("{" "OPAQUEID" "}" "TCOLON" term ":=" term ".")
+            ("thm" "NEWID" ":=" term ".")
+            ("thm" "NEWID" "TCOLON" term ":=" term ".")
             ("[" context "]" term "-->" term)
-            ("[" context "]" term "-->" term ".")
-            ("#ASSERT" term "=~" term "."))
-      (decl ("CID" "RCOLON" term))
-      (context (decl "," context)
-               (decl))
+            ("[" context "]" term "-->" term "."))
+      (context ("CID" "," context)
+               ("CID"))
       (tdecl ("ID" "LCOLON" term)
              (term))
       (term ("_")
@@ -211,7 +212,6 @@ Return one of:
 - 'pragma when point is in a line starting by a `#'
 - 'context when point is in a rewrite context
            and not inside a sub-term
-- 'opaque when point is inside braces
 - 'top when point is before the first `:' or `:=' of the line
 - nil otherwise"
   (cond
@@ -219,10 +219,8 @@ Return one of:
     'comment)
    ((dedukti-smie-pragmap)
     'pragma)
-   ((looking-back "[[,][^],:]*")
+   ((looking-back "[[][^]]*")
     'context)
-   ((looking-back "{[^}]*")
-    'opaque)
    ((looking-back "\\(#\\|\\.[^a-zA-Z0-9_]\\)[^.#:]*")
     'top)))
 
@@ -238,7 +236,9 @@ Return one of:
   (cond
    ;; Simple tokens
    ((looking-at (regexp-opt
-                 '(":="
+                 '("def"
+                   "thm"
+                   ":="
                    "-->"
                    "->"
                    "=>"
@@ -260,7 +260,6 @@ Return one of:
     ;; and at toplevel (TCOLON).
     (prog1
         (pcase (dedukti-smie-position)
-          (`context "RCOLON")
           (`top "TCOLON")
           (_ "LCOLON"))
       (forward-char)))
@@ -370,6 +369,8 @@ For the format of KIND and TOKEN, see `smie-rules-function'."
     (`(,_ . ",") (smie-rule-separator kind))
 
     ;; Toplevel
+    (`(:before . "def") '(column . 0))
+    (`(:before . "thm") '(column . 0))
     (`(:before . "TCOLON") (if (smie-rule-hanging-p)
                                dedukti-indent-basic
                              nil))
@@ -539,7 +540,7 @@ The result is displayed in the echo area.
 BEG and END are the positions delimiting the term.
 When called interactively, they are set to the region limits."
   (interactive "r")
-  (message (dedukti-eval-term-to-string beg end ":= %s.")))
+  (message (dedukti-eval-term-to-string beg end "#HNF %s.")))
 
 (defun dedukti-wnf (beg end)
   "Call Dedukti to reduce the selected term in weak normal form.
@@ -574,7 +575,7 @@ The term is displayed in parens."
 BEG and END are the positions delimiting the term.
 When called interactively, they are set to the region limits."
   (interactive "r")
-  (dedukti-reduce beg end ":= %s."))
+  (dedukti-reduce beg end "#HNF %s."))
 
 (defun dedukti-reduce-wnf (beg end)
   "Same as `dedukti-reduce' using weak head reduction.
