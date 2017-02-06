@@ -405,7 +405,7 @@ ENDCTX is the position of the end of the context,
        after the closing bracket,
 ARR is the position of the beginning of the rewrite arrow,
 END is the position just after the dot closing the rewrite-rule group."
-  (let (startctx endctx arr end)
+  (let (startctx endctx arr end (start (point)))
     (save-excursion
       (and
        (re-search-backward "\\[" nil t)
@@ -416,6 +416,7 @@ END is the position just after the dot closing the rewrite-rule group."
        (setq arr (- (point) 3))
        (re-search-forward "\\.[^a-zA-Z0-9_]" nil t)
        (setq end (- (point) 1))
+       (>= end start)
        (list startctx endctx arr end)))))
 
 (defun dedukti-beginning-of-phrase ()
