@@ -613,8 +613,10 @@ When called interactively, they are set to the region limits."
              (mapconcat 'identity dedukti-check-options " ")
              (buffer-file-name)))))
     (setq s (dedukti-remove-debrujn s))
+    (setq s (replace-regexp-in-string "?" "_" s nil t))
     (setq s (replace-regexp-in-string "\n" ".\n" s nil t))
-    (setq s (replace-regexp-in-string "\\(ERROR.*context:.\\)" "(; \\1 ;)" s))
+    (setq s (replace-regexp-in-string "\\.\\.\n" ".\n" s nil t))
+    (setq s (replace-regexp-in-string "\\(ERROR.*context:\\)\\." "(; \\1 ;)" s))
     (setq s (replace-regexp-in-string " type:" "_type :=" s nil t))
     (insert s)))
 
