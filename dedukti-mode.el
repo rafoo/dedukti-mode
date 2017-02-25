@@ -608,7 +608,9 @@ When called interactively, they are set to the region limits."
   (interactive)
   (let ((s (shell-command-to-string
             (format
-             "dkcheck -nc %s"
+             "%s %s %s"
+             dedukti-path
+             (mapconcat 'identity dedukti-check-options " ")
              (buffer-file-name)))))
     (setq s (dedukti-remove-debrujn s))
     (setq s (replace-regexp-in-string "\n" ".\n" s nil t))
