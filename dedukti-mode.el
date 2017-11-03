@@ -5,6 +5,8 @@
 ;; Author: Raphaël Cauderlier
 ;; Version: 0.1
 ;; License: CeCILL-B
+;; Keywords: languages dedukti
+;; URL: https://github.com/rafoo/dedukti-mode
 
 ;;; Commentary:
 ;; This file defines a major mode for editing Dedukti files.
